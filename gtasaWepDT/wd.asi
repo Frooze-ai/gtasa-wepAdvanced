@@ -1,0 +1,60 @@
+#include <Windows.h>
+#include "MemoryMgr.h"
+
+DWORD dwLastCheck = 0;
+int iLastDirtyLevel = -1;
+
+void UpdateWeaponDirt()
+{
+    // kir seviyesini okur
+    int iDirtyLevel = Memory::Read<int>(0xB7CB5C, true);
+
+    // kir seviyesi değiştiyse .txd'yi değişir
+    if (iLastDirtyLevel != iDirtyLevel)
+    {
+        iLastDirtyLevel = iDirtyLevel;
+
+        if (iDirtyLevel == 0)
+        {
+            // temiz txd
+            Memory::Patch<const char*>(0x8D61C4, "m4", true);
+        }
+        else if (iDirtyLevel == 1)
+        {
+            // yarı temiz txd
+            Memory::Patch<const char*>(0x8D61C4, "m4hfd", true);
+        }
+        else if (iDirtyLevel == 2)
+        {
+            // kirli txd
+            Memory::Patch<const char*>(0x8D61C4, "m4d", true);
+        }
+    }
+}
+
+void __declspec(naked) WeaponFireHook()
+{
+    __asm
+    {
+        pushad
+        call UpdateWeaponDirt
+        popad
+        jmp dword ptr ds:[0x746A7D]
+    }
+}
+
+void InstallHooks()
+{
+    Memory::InjectHook(0x746A77, &WeaponFireHook, PATCH_JUMP);
+
+    Memory::Patch<uint8_t>(0x53E3BB, 0x01, true);
+}
+
+BOOL APIENTRY DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved)
+{
+    if (dwReason == DLL_PROCESS_ATTACH)
+    {
+        InstallHooks();
+    }
+    return TRUE;
+}
